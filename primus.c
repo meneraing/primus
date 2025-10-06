@@ -1036,7 +1036,7 @@ int main(int argc, char *argv[]) {
 	setenv("WAYLAND_DISPLAY", socket, true);
 	if (startup_cmd) {
 		if (fork() == 0) {
-			execl("/bin/sh", "/bin/sh", "-c", startup_cmd, (void *)NULL);
+			execl("/bin/sh", "/bin/sh", "-c", startup_cmd, (char *)NULL);
 		}
 	}
 	/* Run the Wayland event loop. This does not return until you exit the
