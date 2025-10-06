@@ -309,8 +309,6 @@ static void server_new_pointer(struct wlr_input_device *device) {
 static void server_new_input(struct wl_listener *listener, void *data) {
 	/* This event is raised by the backend when a new input device becomes
 	 * available. */
-	struct primus_server *server =
-		wl_container_of(listener, server, new_input);
 	struct wlr_input_device *device = data;
 	switch (device->type) {
 	case WLR_INPUT_DEVICE_KEYBOARD:
@@ -326,19 +324,16 @@ static void server_new_input(struct wl_listener *listener, void *data) {
 	 * communiciated to the client. In TinyWL we always have a cursor, even if
 	 * there are no pointer devices, so we always include that capability. */
 	uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
-	if (!wl_list_empty(&server->keyboards)) {
+	if (!wl_list_empty(&server.keyboards)) {
 		caps |= WL_SEAT_CAPABILITY_KEYBOARD;
 	}
-	wlr_seat_set_capabilities(server->seat, caps);
+	wlr_seat_set_capabilities(server.seat, caps);
 }
 
 static void seat_request_cursor(struct wl_listener *listener, void *data) {
-	struct primus_server *server = wl_container_of(
-			listener, server, request_cursor);
 	/* This event is raised by the seat when a client provides a cursor image */
 	struct wlr_seat_pointer_request_set_cursor_event *event = data;
-	struct wlr_seat_client *focused_client =
-		server->seat->pointer_state.focused_client;
+	struct wlr_seat_client *focused_client = server.seat->pointer_state.focused_client;
 	/* This can be sent by any client, so we check to make sure this one is
 	 * actually has pointer focus first. */
 	if (focused_client == event->seat_client) {
@@ -346,20 +341,17 @@ static void seat_request_cursor(struct wl_listener *listener, void *data) {
 		 * provided surface as the cursor image. It will set the hardware cursor
 		 * on the output that it's currently on and continue to do so as the
 		 * cursor moves between outputs. */
-		wlr_cursor_set_surface(server->cursor, event->surface,
-				event->hotspot_x, event->hotspot_y);
+		wlr_cursor_set_surface(server.cursor, event->surface, event->hotspot_x, event->hotspot_y);
 	}
 }
 
 static void seat_pointer_focus_change(struct wl_listener *listener, void *data) {
-	struct primus_server *server = wl_container_of(
-			listener, server, pointer_focus_change);
 	/* This event is raised when the pointer focus is changed, including when the
 	 * client is closed. We set the cursor image to its default if target surface
 	 * is NULL */
 	struct wlr_seat_pointer_focus_change_event *event = data;
 	if (event->new_surface == NULL) {
-		wlr_cursor_set_xcursor(server->cursor, server->cursor_mgr, "default");
+		wlr_cursor_set_xcursor(server.cursor, server.cursor_mgr, "default");
 	}
 }
 
@@ -368,10 +360,8 @@ static void seat_request_set_selection(struct wl_listener *listener, void *data)
 	 * usually when the user copies something. wlroots allows compositors to
 	 * ignore such requests if they so choose, but in primus we always honor
 	 */
-	struct primus_server *server = wl_container_of(
-			listener, server, request_set_selection);
 	struct wlr_seat_request_set_selection_event *event = data;
-	wlr_seat_set_selection(server->seat, event->source, event->serial);
+	wlr_seat_set_selection(server.seat, event->source, event->serial);
 }
 
 static struct primus_toplevel *desktop_toplevel_at(double lx, double ly, struct wlr_surface **surface, double *sx, double *sy) {
@@ -508,44 +498,34 @@ static void process_cursor_motion(uint32_t time) {
 static void server_cursor_motion(struct wl_listener *listener, void *data) {
 	/* This event is forwarded by the cursor when a pointer emits a _relative_
 	 * pointer motion event (i.e. a delta) */
-	struct primus_server *server =
-		wl_container_of(listener, server, cursor_motion);
 	struct wlr_pointer_motion_event *event = data;
 	/* The cursor doesn't move unless we tell it to. The cursor automatically
 	 * handles constraining the motion to the output layout, as well as any
 	 * special configuration applied for the specific input device which
 	 * generated the event. You can pass NULL for the device if you want to move
 	 * the cursor around without any input. */
-	wlr_cursor_move(server->cursor, &event->pointer->base,
-			event->delta_x, event->delta_y);
+	wlr_cursor_move(server.cursor, &event->pointer->base,	event->delta_x, event->delta_y);
 	process_cursor_motion(event->time_msec);
 }
 
-static void server_cursor_motion_absolute(
-		struct wl_listener *listener, void *data) {
+static void server_cursor_motion_absolute(struct wl_listener *listener, void *data) {
 	/* This event is forwarded by the cursor when a pointer emits an _absolute_
 	 * motion event, from 0..1 on each axis. This happens, for example, when
 	 * wlroots is running under a Wayland window rather than KMS+DRM, and you
 	 * move the mouse over the window. You could enter the window from any edge,
 	 * so we have to warp the mouse there. There is also some hardware which
 	 * emits these events. */
-	struct primus_server *server =
-		wl_container_of(listener, server, cursor_motion_absolute);
 	struct wlr_pointer_motion_absolute_event *event = data;
-	wlr_cursor_warp_absolute(server->cursor, &event->pointer->base, event->x,
-		event->y);
+	wlr_cursor_warp_absolute(server.cursor, &event->pointer->base, event->x, event->y);
 	process_cursor_motion(event->time_msec);
 }
 
 static void server_cursor_button(struct wl_listener *listener, void *data) {
 	/* This event is forwarded by the cursor when a pointer emits a button
 	 * event. */
-	struct primus_server *server =
-		wl_container_of(listener, server, cursor_button);
 	struct wlr_pointer_button_event *event = data;
 	/* Notify the client with pointer focus that a button press has occurred */
-	wlr_seat_pointer_notify_button(server->seat,
-			event->time_msec, event->button, event->state);
+	wlr_seat_pointer_notify_button(server.seat,	event->time_msec, event->button, event->state);
 	if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
 		/* If you released any buttons, we exit interactive move/resize mode. */
 		reset_cursor_mode();
@@ -553,7 +533,7 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
 		/* Focus that client if the button was _pressed_ */
 		double sx, sy;
 		struct wlr_surface *surface = NULL;
-		struct primus_toplevel *toplevel = desktop_toplevel_at(server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+		struct primus_toplevel *toplevel = desktop_toplevel_at(server.cursor->x, server.cursor->y, &surface, &sx, &sy);
 		focus_toplevel(toplevel);
 	}
 }
@@ -561,12 +541,9 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
 static void server_cursor_axis(struct wl_listener *listener, void *data) {
 	/* This event is forwarded by the cursor when a pointer emits an axis event,
 	 * for example when you move the scroll wheel. */
-	struct primus_server *server =
-		wl_container_of(listener, server, cursor_axis);
 	struct wlr_pointer_axis_event *event = data;
 	/* Notify the client with pointer focus of the axis event. */
-	wlr_seat_pointer_notify_axis(server->seat,
-			event->time_msec, event->orientation, event->delta,
+	wlr_seat_pointer_notify_axis(server.seat,	event->time_msec, event->orientation, event->delta,
 			event->delta_discrete, event->source, event->relative_direction);
 }
 
@@ -575,9 +552,8 @@ static void server_cursor_frame(struct wl_listener *listener, void *data) {
 	 * event. Frame events are sent after regular pointer events to group
 	 * multiple events together. For instance, two axis events may happen at the
 	 * same time, in which case a frame event won't be sent in between. */
-	struct primus_server *server = wl_container_of(listener, server, cursor_frame);
 	/* Notify the client with pointer focus of the frame event. */
-	wlr_seat_pointer_notify_frame(server->seat);
+	wlr_seat_pointer_notify_frame(server.seat);
 }
 
 static void output_frame(struct wl_listener *listener, void *data) {
@@ -618,12 +594,11 @@ static void output_destroy(struct wl_listener *listener, void *data) {
 static void server_new_output(struct wl_listener *listener, void *data) {
 	/* This event is raised by the backend when a new output (aka a display or
 	 * monitor) becomes available. */
-	struct primus_server *server = wl_container_of(listener, server, new_output);
 	struct wlr_output *wlr_output = data;
 
 	/* Configures the output created by the backend to use our allocator
 	 * and our renderer. Must be done once, before commiting the output */
-	wlr_output_init_render(wlr_output, server->allocator, server->renderer);
+	wlr_output_init_render(wlr_output, server.allocator, server.renderer);
 
 	/* The output may be disabled, switch it on. */
 	struct wlr_output_state state;
@@ -647,7 +622,7 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 	/* Allocates and configures our state for this output */
 	struct primus_output *output = calloc(1, sizeof(*output));
 	output->wlr_output = wlr_output;
-	output->server = server;
+	output->server = &server;
 
 	/* Sets up a listener for the frame event. */
 	output->frame.notify = output_frame;
@@ -661,7 +636,7 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 	output->destroy.notify = output_destroy;
 	wl_signal_add(&wlr_output->events.destroy, &output->destroy);
 
-	wl_list_insert(&server->outputs, &output->link);
+	wl_list_insert(&server.outputs, &output->link);
 
 	/* Adds this to the output layout. The add_auto function arranges outputs
 	 * from left-to-right in the order they appear. A more sophisticated
@@ -672,10 +647,9 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 	 * display, which Wayland clients can see to find out information about the
 	 * output (such as DPI, scale factor, manufacturer, etc).
 	 */
-	struct wlr_output_layout_output *l_output = wlr_output_layout_add_auto(server->output_layout,
-		wlr_output);
-	struct wlr_scene_output *scene_output = wlr_scene_output_create(server->scene, wlr_output);
-	wlr_scene_output_layout_add_output(server->scene_layout, l_output, scene_output);
+	struct wlr_output_layout_output *l_output = wlr_output_layout_add_auto(server.output_layout, wlr_output);
+	struct wlr_scene_output *scene_output = wlr_scene_output_create(server.scene, wlr_output);
+	wlr_scene_output_layout_add_output(server.scene_layout, l_output, scene_output);
 }
 
 static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
@@ -797,8 +771,7 @@ static void xdg_toplevel_request_maximize(
 	}
 }
 
-static void xdg_toplevel_request_fullscreen(
-		struct wl_listener *listener, void *data) {
+static void xdg_toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
 	/* Just as with request_maximize, we must send a configure here. */
 	struct primus_toplevel *toplevel =
 		wl_container_of(listener, toplevel, request_fullscreen);
@@ -809,12 +782,11 @@ static void xdg_toplevel_request_fullscreen(
 
 static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	/* This event is raised when a client creates a new toplevel (application window). */
-	struct primus_server *server = wl_container_of(listener, server, new_xdg_toplevel);
 	struct wlr_xdg_toplevel *xdg_toplevel = data;
 
 	/* Allocate a primus_toplevel for this surface */
 	struct primus_toplevel *toplevel = calloc(1, sizeof(*toplevel));
-	toplevel->server = server;
+	toplevel->server = &server;
 	toplevel->xdg_toplevel = xdg_toplevel;
 	toplevel->scene_tree =
 		wlr_scene_xdg_surface_create(&toplevel->server->scene->tree, xdg_toplevel->base);
