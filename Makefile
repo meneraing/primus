@@ -10,10 +10,10 @@ LIBS!=$(PKG_CONFIG) --libs $(PKGS)
 
 all: primus
 
-primus.o: primus.c config.h
-	$(CC) -c $< -g -Werror $(CFLAGS) -I. -DWLR_USE_UNSTABLE -o $@
 primus: primus.o
 	$(CC) $^ $> -g -Werror $(CFLAGS) $(LDFLAGS) $(LIBS) -o $@
+primus.o: primus.c config.h
+	$(CC) -c $< -g -Werror $(CFLAGS) -I. -DWLR_USE_UNSTABLE -o $@
 
 config.h:
 	cp config.def.h $@

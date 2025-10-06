@@ -8,6 +8,7 @@ Simply install the dependencies:
 
 - wlroots-0.20
 - wayland-protocols
+- kitty _(optional, unless you don't modify the config.h definition for terminal)_
 
 And run `make`.
 
@@ -18,13 +19,11 @@ Primus will open a Wayland or X11 window respectively to act as a virtual
 display. You can then open Wayland windows by setting `WAYLAND_DISPLAY` to the
 value shown in the logs. You can also run `./primus` from a TTY.
 
-In either case, you will likely want to specify `-s [cmd]` to run a command at
-startup, such as a terminal emulator. This will be necessary to start any new
-programs from within the compositor, as Primus does not support any custom
-keybindings yet. Primus supports the following keybindings:
+You can use `-s [cmd]` to run a command at startup.
+Primus supports the following keybindings out-of-the-box:
 
-- `Super+Escape`: Terminate the compositor
-- `Super+F1`: Cycle between windows
+- `Super+Shift+Q`: Terminate the compositor
+- `Super+Return`: Start kitty terminal emulator
 
 `Super` is the Windows key. This can be configured in `config.h` by setting the `MODKEY` define.
 
