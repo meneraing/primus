@@ -14,6 +14,7 @@
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_pointer.h>
@@ -63,6 +64,10 @@ struct primus_server {
 	struct wl_listener new_xdg_popup;
 	struct wl_list toplevels;
 
+  struct wlr_layer_shell_v1 *layer_shell;
+  struct wl_listener new_layer_surface;
+  struct wl_list layer_surfaces;
+
 	struct wlr_cursor *cursor;
 	struct wlr_xcursor_manager *cursor_mgr;
 	struct wl_listener cursor_motion;
@@ -110,6 +115,17 @@ struct primus_toplevel {
 	struct wl_listener request_resize;
 	struct wl_listener request_maximize;
 	struct wl_listener request_fullscreen;
+};
+
+struct primus_layer_surface {
+  struct wl_list link;
+  struct primus_server *server;
+  struct wlr_layer_surface_v1 *layer_surface;
+  struct wlr_scene_layer_surface_v1 *scene_tree;
+  
+  struct wl_listener map;
+  struct wl_listener unmap;
+  struct wl_listener destroy;
 };
 
 struct primus_popup {
@@ -702,6 +718,26 @@ static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
 	free(toplevel);
 }
 
+static void layer_surface_map(struct wl_listener *listener, void *data) {
+    struct primus_layer_surface *surface = wl_container_of(listener, surface, map);
+    /* Handle mapping of layer surface */
+}
+
+static void layer_surface_unmap(struct wl_listener *listener, void *data) {
+    struct primus_layer_surface *surface = wl_container_of(listener, surface, unmap);
+    /* Handle unmapping of layer surface */
+}
+
+static void layer_surface_destroy(struct wl_listener *listener, void *data) {
+    struct primus_layer_surface *surface = wl_container_of(listener, surface, destroy);
+    /* Clean up layer surface */
+    wl_list_remove(&surface->link);
+    wl_list_remove(&surface->map.link);
+    wl_list_remove(&surface->unmap.link);
+    wl_list_remove(&surface->destroy.link);
+    free(surface);
+}
+
 static void begin_interactive(struct primus_toplevel *toplevel,
 		enum primus_cursor_mode mode, uint32_t edges) {
 	/* This function sets up an interactive move or resize operation, where the
@@ -863,6 +899,29 @@ static void server_new_xdg_popup(struct wl_listener *listener, void *data) {
 	wl_signal_add(&xdg_popup->events.destroy, &popup->destroy);
 }
 
+static void server_new_layer_surface(struct wl_listener *listener, void *data) {
+    struct wlr_layer_surface_v1 *layer_surface = data;
+    
+    /* Allocate a primus_layer_surface for this surface */
+    struct primus_layer_surface *surface = calloc(1, sizeof(*surface));
+    surface->server = &server;
+    surface->layer_surface = layer_surface;
+    
+    /* Create scene tree node for the layer surface */
+    surface->scene_tree = wlr_scene_layer_surface_v1_create(&server.scene->tree, layer_surface);
+    
+    /* Add listeners for layer surface events */
+    surface->map.notify = layer_surface_map;
+    wl_signal_add(&layer_surface->surface->events.map, &surface->map);
+    surface->unmap.notify = layer_surface_unmap;
+    wl_signal_add(&layer_surface->surface->events.unmap, &surface->unmap);
+    surface->destroy.notify = layer_surface_destroy;
+    wl_signal_add(&layer_surface->events.destroy, &surface->destroy);
+    
+    /* Add to list of managed surfaces */
+    wl_list_insert(&server.layer_surfaces, &surface->link);
+}
+
 int main(int argc, char *argv[]) {
 	wlr_log_init(WLR_DEBUG, NULL);
 	char *startup_cmd = NULL;
@@ -926,7 +985,7 @@ int main(int argc, char *argv[]) {
 	 * to dig your fingers in and play with their behavior if you want. Note that
 	 * the clients cannot set the selection directly without compositor approval,
 	 * see the handling of the request_set_selection event below.*/
-	wlr_compositor_create(server.wl_display, 5, server.renderer);
+	wlr_compositor_create(server.wl_display, 6, server.renderer);
 	wlr_subcompositor_create(server.wl_display);
 	wlr_data_device_manager_create(server.wl_display);
 
@@ -954,11 +1013,17 @@ int main(int argc, char *argv[]) {
 	 * https://drewdevault.com/2018/07/29/Wayland-shells.html.
 	 */
 	wl_list_init(&server.toplevels);
-	server.xdg_shell = wlr_xdg_shell_create(server.wl_display, 3);
+	server.xdg_shell = wlr_xdg_shell_create(server.wl_display, 6);
 	server.new_xdg_toplevel.notify = server_new_xdg_toplevel;
 	wl_signal_add(&server.xdg_shell->events.new_toplevel, &server.new_xdg_toplevel);
 	server.new_xdg_popup.notify = server_new_xdg_popup;
 	wl_signal_add(&server.xdg_shell->events.new_popup, &server.new_xdg_popup);
+
+  /* Set up layer-shell */
+  wl_list_init(&server.layer_surfaces);
+  server.layer_shell = wlr_layer_shell_v1_create(server.wl_display, 4);
+  server.new_layer_surface.notify = server_new_layer_surface;
+  wl_signal_add(&server.layer_shell->events.new_surface, &server.new_layer_surface);
 
 	/*
 	 * Creates a cursor, which is a wlroots utility for tracking the cursor

@@ -3,7 +3,7 @@
  *  Alt key = WLR_MODIFIER_ALT,
  *  Windows key = WLR_MODIFIER_LOGO
  */
-#define MODKEY WLR_MODIFIER_LOGO
+#define MODKEY WLR_MODIFIER_ALT
 
 /* Declare the actions you want to trigger with a keybind here.
  * Follow the example.
